@@ -14,18 +14,21 @@ files = dir(data_path+"/cmems_feb*.nc");
 current_time = dates(1);
 time_step = 600.;
 
-n_particles = 5000;
+n_particles = 500;
 
 % Initial positions
 rng(123, 'simdTwister')
 dx_init = rand(n_particles, 1) / 100.;
 dy_init = rand(n_particles, 1) / 100.;
 
-px = 24.74 + dx_init;
-py = 59.61 + dy_init;
+px = 24.63 + dx_init;
+py = 59.66 + dy_init;
+
+px_init = px;
+py_init = py;
 
 % Define the solver
-solver = @(px, py, current_time) euler_step(px, py, current_time, time_step, uu, vv, lon, lat, dates, n_particles);
+solver = @(px, py, current_time) euler_step(px, py, current_time, time_step, uu, vv, lon, lat, dates);
 
 %-----------------
 % Create plot
@@ -63,9 +66,9 @@ while current_time < dates(end)
         py_all = [py_all(buffer_start:end); py];
 
     end
-    
+   
     [px, py] = solver(px, py, current_time);
-    
+   
     if mod(istep, save_step) == 0
         % Update scatter data
         time_idx = floor(get_index(current_time, dates));
@@ -80,6 +83,26 @@ while current_time < dates(end)
 end
 
 disp("Done");
+
+%-----------------
+% Plot initial and final positions
+hold off;
+figure();
+h_water_vel = pcolor(lon, lat, water_vel(:,:,time_idx)');
+colormap("jet");
+caxis([0.,0.6]);
+h_water_vel.EdgeColor = "none";
+h_water_vel.FaceColor = 'interp';
+hold on;
+scatter(px_init, py_init, 20, "green", "filled");
+scatter(px, py, 20, "red", "filled");
+
+xlim([22.9, 27]);
+ylim([59, 60.2]);
+
+fname = "fig_result_" + string(datetime('now','TimeZone','local','Format','HHmmss')) + ".png";
+f = gcf;
+exportgraphics(f, fname, "Resolution", 300);
 
 %==========================================================================
 
@@ -119,7 +142,8 @@ function [uu, vv, lon, lat, dates] = load_data(files, data_path, uu_name, vv_nam
   
 end 
 
-function [px, py] = euler_step(px, py, current_time, time_step, uu, vv, lon, lat, dates, n_particles)
+function [px, py] = euler_step(px, py, current_time, time_step, uu, vv, lon, lat, dates)
+    n_particles = numel(px);
     %-----------------
     % Find current speed
     time_idx = get_index(current_time, dates);
@@ -143,9 +167,11 @@ function [px, py] = euler_step(px, py, current_time, time_step, uu, vv, lon, lat
     % Update positions
     px(~nans) = px(~nans) + (pudeg(~nans) + du(~nans)) * time_step;
     py(~nans) = py(~nans) + (pvdeg(~nans) + dv(~nans)) * time_step;
+    
 end
 
-function [px, py] = rk2_step(px, py, current_time, time_step, uu, vv, lon, lat, dates, n_particles)
+function [px, py] = rk2_step(px, py, current_time, time_step, uu, vv, lon, lat, dates)
+    n_particles = numel(px);
     %-----------------
     % Predictor step
     time_idx1 = get_index(current_time, dates);
