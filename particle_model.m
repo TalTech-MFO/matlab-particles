@@ -3,15 +3,16 @@ clear;
 %-----------------
 % Load data
 data_path = "./data";
+
 % files = dir(data_path+"/surface*.nc");
 % [uu, vv, lon, lat, dates] = load_data(files, data_path, "uu", "vv", "lonc", "latc");
 
-files = dir(data_path+"/cmems_feb*.nc");
+files = dir(data_path+"/cmems_mar_2025.nc");
 [uu, vv, lon, lat, dates] = load_data(files, data_path, "uo", "vo", "longitude", "latitude");
 
 %-----------------
 % Simulation setup
-current_time = dates(1);
+current_time = dates(5*24);
 time_step = 600.;
 
 n_particles = 500;
@@ -44,6 +45,7 @@ view(0,90);
 % Create scatter objects with initial data
 h_track = scatter(px, py, 10, [0.5 0.5 0.5], 'filled'); 
 h_current = scatter(px, py, 30, 'red', 'filled');
+h_text = text(27 , 58, string(datetime(current_time,'TimeZone','local','Format','yyyy-MM-dd HH:mm:ss')));
 drawnow;
 
 % Initialize track arrays
@@ -51,6 +53,8 @@ save_step = 5
 buffer_maxsize = 40;
 px_all = px;
 py_all = py;
+
+beached_dates = [];
 
 %-----------------
 % Run simulation
@@ -66,8 +70,17 @@ while current_time < dates(end)
         py_all = [py_all(buffer_start:end); py];
 
     end
+
+    if mod(istep, 144) == 0
+        px = [px; px_init];
+        py = [py; py_init];
+    end
    
-    [px, py] = solver(px, py, current_time);
+    [px, py, is_beached] = solver(px, py, current_time);
+
+    if is_beached
+        beached_dates = [beached_dates; current_time];
+    end 
    
     if mod(istep, save_step) == 0
         % Update scatter data
@@ -75,7 +88,7 @@ while current_time < dates(end)
         set(h_water_vel, 'CData', water_vel(:,:,time_idx)');
         set(h_track, 'XData', px_all, 'YData', py_all);
         set(h_current, 'XData', px, 'YData', py);
-        
+        set(h_text, 'String', string(datetime(current_time,'TimeZone','local','Format','yyyy-MM-dd HH:mm:ss')));
         drawnow;
     end
     
@@ -142,7 +155,7 @@ function [uu, vv, lon, lat, dates] = load_data(files, data_path, uu_name, vv_nam
   
 end 
 
-function [px, py] = euler_step(px, py, current_time, time_step, uu, vv, lon, lat, dates)
+function [px, py, is_beached] = euler_step(px, py, current_time, time_step, uu, vv, lon, lat, dates)
     n_particles = numel(px);
     %-----------------
     % Find current speed
@@ -167,10 +180,11 @@ function [px, py] = euler_step(px, py, current_time, time_step, uu, vv, lon, lat
     % Update positions
     px(~nans) = px(~nans) + (pudeg(~nans) + du(~nans)) * time_step;
     py(~nans) = py(~nans) + (pvdeg(~nans) + dv(~nans)) * time_step;
+    is_beached = sum(nans) > 0;
     
 end
 
-function [px, py] = rk2_step(px, py, current_time, time_step, uu, vv, lon, lat, dates)
+function [px, py, is_beached] = rk2_step(px, py, current_time, time_step, uu, vv, lon, lat, dates)
     n_particles = numel(px);
     %-----------------
     % Predictor step
@@ -226,7 +240,7 @@ function [px, py] = rk2_step(px, py, current_time, time_step, uu, vv, lon, lat, 
     % Update positions
     px = px + (dx_pred + dx_corr) * (0.5*time_step);
     py = py + (dy_pred + dy_corr) * (0.5*time_step);
-    
+    is_beached = sum(nans) > 0;
 end 
 
 function [c] = bilinear_interp(x, y, t, field)
